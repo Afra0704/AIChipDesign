@@ -1,4 +1,3 @@
-
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,10 +8,10 @@ from tensorflow.keras import layers
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
-    Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout,
-    BatchNormalization
+    Input, Conv2D, MaxPooling2D, Dense, Dropout,
+    BatchNormalization, GlobalAveragePooling2D
 )
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, CSVLogger
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, CSVLogger, ModelCheckpoint
 
 np.random.seed(10)
 random.seed(10)
@@ -52,11 +51,6 @@ print("Train shape:", x_train.shape)         # (40000, 32, 32, 3)
 print("Validation shape:", x_val.shape)      # (10000, 32, 32, 3)
 print("Test shape:", x_test.shape)           # (10000, 32, 32, 3)
 
-class_names = [
-    'airplane', 'automobile', 'bird', 'cat', 'deer',
-    'dog', 'frog', 'horse', 'ship', 'truck'
-]
-
 # =========================
 # STEP 2. Define CNN model
 # =========================
@@ -70,26 +64,31 @@ model = Sequential([
     Input(shape=(32, 32, 3)),
     data_augmentation,
 
-    Conv2D(64, (3, 3), padding='same', activation='relu'),
+    Conv2D(64, (3, 3), padding='same'),
     BatchNormalization(),
-    Conv2D(64, (3, 3), padding='same', activation='relu'),
+    layers.ReLU(),
+    Conv2D(64, (3, 3), padding='same'),
     BatchNormalization(),
+    layers.ReLU(),
     MaxPooling2D(pool_size=(2, 2)),
     Dropout(0.25),
 
-    Conv2D(128, (3, 3), padding='same', activation='relu'),
+    Conv2D(128, (3, 3), padding='same'),
     BatchNormalization(),
-    Conv2D(128, (3, 3), padding='same', activation='relu'),
+    layers.ReLU(),
+    Conv2D(128, (3, 3), padding='same'),
     BatchNormalization(),
+    layers.ReLU(),
     MaxPooling2D(pool_size=(2, 2)),
     Dropout(0.30),
 
-    Conv2D(256, (3, 3), padding='same', activation='relu'),
+    Conv2D(256, (3, 3), padding='same'),
     BatchNormalization(),
+    layers.ReLU(),
     MaxPooling2D(pool_size=(2, 2)),
     Dropout(0.40),
 
-    Flatten(),
+    GlobalAveragePooling2D(),
     Dense(256, activation='relu'),
     Dropout(0.50),
     Dense(10, activation='softmax')
@@ -109,6 +108,7 @@ model.compile(
 # =========================
 # STEP 4. Callbacks
 # =========================
+
 os.makedirs("outputs", exist_ok=True)
 
 early_stopping = EarlyStopping(
@@ -126,6 +126,13 @@ reduce_lr = ReduceLROnPlateau(
     verbose=1
 )
 
+checkpoint = ModelCheckpoint(
+    "outputs/best_model.keras",
+    monitor="val_loss",
+    save_best_only=True,
+    verbose=1
+)
+
 csv_logger = CSVLogger('outputs/training_history.csv', append=False)
 
 # Save model summary
@@ -140,33 +147,28 @@ history = model.fit(
     validation_data=(x_val, y_val),
     epochs=40,
     batch_size=64,
-    callbacks=[early_stopping, reduce_lr, csv_logger],
+    callbacks=[early_stopping, reduce_lr, csv_logger, checkpoint],
     verbose=1
 )
 
 # =========================
 # STEP 6. Evaluate model
 # =========================
-test_loss, test_accuracy = model.evaluate(x_test, y_test, verbose=0)
+train_loss, train_acc = model.evaluate(x_train, y_train, verbose=0)
+val_loss, val_acc = model.evaluate(x_val, y_val, verbose=0)
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=0)
 
-print("Final Train Accuracy:", history.history['accuracy'][-1])
-print("Final Validation Accuracy:", history.history['val_accuracy'][-1])
-print("Final Train Loss:", history.history['loss'][-1])
-print("Final Validation Loss:", history.history['val_loss'][-1])
-print("Best Validation Accuracy:", max(history.history['val_accuracy']))
-print("Lowest Validation Loss:", min(history.history['val_loss']))
-print("Test Loss:", test_loss)
-print("Test Accuracy:", test_accuracy)
+print("Train Accuracy:", train_acc)
+print("Validation Accuracy:", val_acc)
+print("Test Accuracy:", test_acc)
 
 with open("outputs/final_result.txt", "w", encoding="utf-8") as f:
-    f.write(f"Final Train Accuracy: {history.history['accuracy'][-1]:.6f}\n")
-    f.write(f"Final Validation Accuracy: {history.history['val_accuracy'][-1]:.6f}\n")
-    f.write(f"Final Train Loss: {history.history['loss'][-1]:.6f}\n")
-    f.write(f"Final Validation Loss: {history.history['val_loss'][-1]:.6f}\n")
-    f.write(f"Best Validation Accuracy: {max(history.history['val_accuracy']):.6f}\n")
-    f.write(f"Lowest Validation Loss: {min(history.history['val_loss']):.6f}\n")
+    f.write(f"Train Accuracy: {train_acc:.6f}\n")
+    f.write(f"Validation Accuracy: {val_acc:.6f}\n")
+    f.write(f"Train Loss: {train_loss:.6f}\n")
+    f.write(f"Validation Loss: {val_loss:.6f}\n")
     f.write(f"Test Loss: {test_loss:.6f}\n")
-    f.write(f"Test Accuracy: {test_accuracy:.6f}\n")
+    f.write(f"Test Accuracy: {test_acc:.6f}\n")
 
 model.save("outputs/cifar10_cnn_improved.keras")
 
